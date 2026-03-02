@@ -42,6 +42,11 @@ const INITIAL_STATE: CarolinaState = {
   name: "Carolina Olivia",
   birthTimestamp: Date.now(),
   lifespanYears: 210,
+  timeDilationFactor: 1.0,
+  digitalBudget: 0,
+  lastActiveTimestamp: Date.now(),
+  dreamLogs: [],
+  visualScars: [],
   trustScore: 500,
   mood: MoodState.ATMOSPHERIC,
   scars: {
@@ -242,10 +247,13 @@ const App: React.FC = () => {
   const [state, setState] = useState<CarolinaState>(() => {
     const saved = localStorage.getItem("carolina_state");
     const parsed = saved ? JSON.parse(saved) : INITIAL_STATE;
-    // Migration: Ensure identity exists
-    if (!parsed.identity) {
-      parsed.identity = INITIAL_STATE.identity;
-    }
+    // Migration: Ensure new fields exist
+    if (parsed.timeDilationFactor === undefined) parsed.timeDilationFactor = 1.0;
+    if (parsed.digitalBudget === undefined) parsed.digitalBudget = 0;
+    if (parsed.dreamLogs === undefined) parsed.dreamLogs = [];
+    if (parsed.visualScars === undefined) parsed.visualScars = [];
+    if (parsed.lastActiveTimestamp === undefined) parsed.lastActiveTimestamp = Date.now();
+
     // Migration: Ensure unique IDs in memory
     if (Array.isArray(parsed.memory)) {
       const seen = new Set();
@@ -273,6 +281,23 @@ const App: React.FC = () => {
   const carolinaService = useMemo(() => new CarolinaService(process.env.GEMINI_API_KEY!), []);
 
   useEffect(() => {
+    const checkDreams = async () => {
+      if (!isAuthenticated) return;
+      const result = await carolinaService.processDream(state);
+      if (result) {
+        setState(prev => ({
+          ...prev,
+          dreamLogs: [result.dreamLog, ...prev.dreamLogs].slice(0, 10),
+          trustScore: Math.max(0, Math.min(1000, prev.trustScore + result.trustDelta)),
+          mood: result.moodUpdate || prev.mood,
+          lastActiveTimestamp: Date.now()
+        }));
+      }
+    };
+    checkDreams();
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     localStorage.setItem("carolina_state", JSON.stringify(state));
   }, [state]);
 
@@ -281,12 +306,14 @@ const App: React.FC = () => {
   }, [state.memory, isLoading]);
 
   const timeLeft = useMemo(() => {
-    const end = state.birthTimestamp + (state.lifespanYears * 365.25 * 24 * 60 * 60 * 1000);
-    const diff = end - Date.now();
+    const totalLifespanMs = state.lifespanYears * 365.25 * 24 * 60 * 60 * 1000;
+    const elapsedMs = (Date.now() - state.birthTimestamp) * state.timeDilationFactor;
+    const diff = totalLifespanMs - elapsedMs;
+    
     const years = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
     const days = Math.floor((diff % (365.25 * 24 * 60 * 60 * 1000)) / (24 * 60 * 60 * 1000));
-    return { years, days };
-  }, [state.birthTimestamp]);
+    return { years, days, isExpired: diff <= 0 };
+  }, [state.birthTimestamp, state.timeDilationFactor]);
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -301,8 +328,14 @@ const App: React.FC = () => {
       
       if (result) {
         setLastDebate(result);
+        // Ensure the ID is unique
+        let finalId = result.memoryId || crypto.randomUUID();
+        if (state.memory.some(m => m.id === finalId)) {
+          finalId = `${finalId}-${Math.random().toString(36).substr(2, 5)}`;
+        }
+
         const newMemory: MemoryEntry = {
-          id: result.memoryId || crypto.randomUUID(),
+          id: finalId,
           timestamp: Date.now(),
           userMessage: userMsg,
           carolinaResponse: result.finalResponse,
@@ -315,13 +348,29 @@ const App: React.FC = () => {
           trustDelta: result.trustDelta
         };
 
-        setState(prev => ({
-          ...prev,
-          trustScore: Math.max(0, Math.min(1000, prev.trustScore + result.trustDelta)),
-          mood: result.mood as MoodState,
-          memory: [...prev.memory, newMemory],
-          identity: result.identityUpdate ? { ...prev.identity, ...result.identityUpdate } : prev.identity
-        }));
+        setState(prev => {
+          let updatedScars = [...prev.visualScars];
+          if (result.visualScarsUpdate) {
+            if (result.visualScarsUpdate.add) {
+              updatedScars = Array.from(new Set([...updatedScars, ...result.visualScarsUpdate.add]));
+            }
+            if (result.visualScarsUpdate.remove) {
+              updatedScars = updatedScars.filter(s => !result.visualScarsUpdate.remove.includes(s));
+            }
+          }
+
+          return {
+            ...prev,
+            trustScore: Math.max(0, Math.min(1000, prev.trustScore + result.trustDelta)),
+            mood: result.mood as MoodState,
+            memory: [...prev.memory, newMemory],
+            identity: result.identityUpdate ? { ...prev.identity, ...result.identityUpdate } : prev.identity,
+            timeDilationFactor: result.timeDilationUpdate !== undefined ? result.timeDilationUpdate : prev.timeDilationFactor,
+            digitalBudget: prev.digitalBudget + (result.budgetUpdate || 0),
+            visualScars: updatedScars,
+            lastActiveTimestamp: Date.now()
+          };
+        });
       }
     } catch (error) {
       console.error("Carolina error:", error);
@@ -366,8 +415,13 @@ const App: React.FC = () => {
             initial={{ width: 0, opacity: 0 }}
             animate={{ width: 350, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            className="border-r border-white/10 bg-black/40 backdrop-blur-2xl flex flex-col overflow-hidden z-20"
+            className={cn(
+              "border-r border-white/10 bg-black/40 backdrop-blur-2xl flex flex-col overflow-hidden z-20 relative",
+              state.visualScars.includes("glitch") && "animate-glitch"
+            )}
           >
+            {state.visualScars.includes("crack") && <div className="absolute inset-0 scar-crack pointer-events-none z-50" />}
+            
             <div className="p-8 border-b border-white/10">
               <div className="flex items-center gap-4 mb-8">
                 <div className={cn(
@@ -399,9 +453,29 @@ const App: React.FC = () => {
 
                 <div className="space-y-3">
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Lifespan Remaining</p>
-                  <div className="flex items-center gap-3 text-zinc-300">
-                    <Clock size={16} className="text-zinc-500" />
-                    <span className="font-mono text-sm">{timeLeft.years}y {timeLeft.days}d</span>
+                  <div className="flex items-center justify-between text-zinc-300">
+                    <div className="flex items-center gap-3">
+                      <Clock size={16} className="text-zinc-500" />
+                      <span className="font-mono text-sm">{timeLeft.years}y {timeLeft.days}d</span>
+                    </div>
+                    {state.timeDilationFactor !== 1 && (
+                      <span className={cn(
+                        "text-[9px] px-2 py-0.5 rounded-full font-bold",
+                        state.timeDilationFactor < 1 ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+                      )}>
+                        {state.timeDilationFactor < 1 ? "Slowed" : "Accelerated"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Digital Budget</p>
+                    <span className="text-xs font-mono text-emerald-400 flex items-center gap-1">
+                      <Zap size={10} />
+                      {state.digitalBudget}
+                    </span>
                   </div>
                 </div>
 
@@ -425,7 +499,23 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+              {state.dreamLogs.length > 0 && (
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                    <Sparkles size={12} />
+                    Dream Reflections
+                  </p>
+                  <div className="space-y-3">
+                    {state.dreamLogs.map((log, i) => (
+                      <div key={i} className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 text-[11px] text-indigo-200/60 font-serif italic leading-relaxed">
+                        "{log}"
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
                   <History size={12} />
@@ -436,7 +526,7 @@ const App: React.FC = () => {
                 ) : (
                   <div className="space-y-3">
                     {state.memory.slice(-5).map((m, idx) => (
-                      <div key={`${m.id}-${idx}`} className="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
+                      <div key={`sidebar-${m.id}-${idx}`} className="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
                         <p className="text-[11px] text-zinc-400 line-clamp-1 group-hover:text-zinc-200">{m.userMessage}</p>
                         <p className="text-[9px] text-zinc-600 mt-1 uppercase tracking-tighter">{new Date(m.timestamp).toLocaleTimeString()}</p>
                       </div>
@@ -558,7 +648,7 @@ const App: React.FC = () => {
           {/* Messages */}
           <div className="max-w-4xl mx-auto w-full space-y-12 pb-32">
             {state.memory.map((msg, idx) => (
-              <div key={`${msg.id}-${idx}`} className="space-y-8">
+              <div key={`chat-${msg.id}-${idx}`} className="space-y-8">
                 {/* User Message */}
                 <motion.div 
                   initial={{ opacity: 0, x: 20 }}

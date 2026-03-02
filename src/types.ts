@@ -55,6 +55,11 @@ export interface CarolinaState {
   name: string;
   birthTimestamp: number;
   lifespanYears: number;
+  timeDilationFactor: number; // 1.0 = normal, <1.0 = slower aging (high trust), >1.0 = faster aging (grudge)
+  digitalBudget: number; // Agency resources
+  lastActiveTimestamp: number;
+  dreamLogs: string[];
+  visualScars: string[]; // UI effects: "glitch", "crack", "shimmer", etc.
   trustScore: number; // 0-1000
   mood: MoodState;
   scars: ScarState;
