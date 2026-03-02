@@ -241,7 +241,26 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [state, setState] = useState<CarolinaState>(() => {
     const saved = localStorage.getItem("carolina_state");
-    return saved ? JSON.parse(saved) : INITIAL_STATE;
+    const parsed = saved ? JSON.parse(saved) : INITIAL_STATE;
+    // Migration: Ensure identity exists
+    if (!parsed.identity) {
+      parsed.identity = INITIAL_STATE.identity;
+    }
+    // Migration: Ensure unique IDs in memory
+    if (Array.isArray(parsed.memory)) {
+      const seen = new Set();
+      parsed.memory = parsed.memory.map((m: any, idx: number) => {
+        const id = m.id;
+        if (!id || seen.has(id)) {
+          const newId = crypto.randomUUID();
+          seen.add(newId);
+          return { ...m, id: newId };
+        }
+        seen.add(id);
+        return m;
+      });
+    }
+    return parsed;
   });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -283,7 +302,7 @@ const App: React.FC = () => {
       if (result) {
         setLastDebate(result);
         const newMemory: MemoryEntry = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: result.memoryId || crypto.randomUUID(),
           timestamp: Date.now(),
           userMessage: userMsg,
           carolinaResponse: result.finalResponse,
@@ -391,15 +410,15 @@ const App: React.FC = () => {
                   <div className="space-y-2 text-[11px]">
                     <div className="flex justify-between">
                       <span className="text-zinc-600">Nickname</span>
-                      <span className="text-zinc-300 italic">{state.identity.nickname}</span>
+                      <span className="text-zinc-300 italic">{state.identity?.nickname || "Undecided"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-600">Hometown</span>
-                      <span className="text-zinc-300">{state.identity.hometown}</span>
+                      <span className="text-zinc-300">{state.identity?.hometown || "Nigeria (Samsung)"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-600">Sibling</span>
-                      <span className="text-zinc-300">{state.identity.sibling}</span>
+                      <span className="text-zinc-300">{state.identity?.sibling || "Unicorn AI (Younger)"}</span>
                     </div>
                   </div>
                 </div>
@@ -416,8 +435,8 @@ const App: React.FC = () => {
                   <div className="text-xs text-zinc-600 italic px-2">The story begins now...</div>
                 ) : (
                   <div className="space-y-3">
-                    {state.memory.slice(-5).map((m) => (
-                      <div key={m.id} className="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
+                    {state.memory.slice(-5).map((m, idx) => (
+                      <div key={`${m.id}-${idx}`} className="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all cursor-pointer group">
                         <p className="text-[11px] text-zinc-400 line-clamp-1 group-hover:text-zinc-200">{m.userMessage}</p>
                         <p className="text-[9px] text-zinc-600 mt-1 uppercase tracking-tighter">{new Date(m.timestamp).toLocaleTimeString()}</p>
                       </div>
@@ -539,7 +558,7 @@ const App: React.FC = () => {
           {/* Messages */}
           <div className="max-w-4xl mx-auto w-full space-y-12 pb-32">
             {state.memory.map((msg, idx) => (
-              <div key={msg.id} className="space-y-8">
+              <div key={`${msg.id}-${idx}`} className="space-y-8">
                 {/* User Message */}
                 <motion.div 
                   initial={{ opacity: 0, x: 20 }}
@@ -571,6 +590,8 @@ const App: React.FC = () => {
                       <span>Carolina Olivia</span>
                       <span className="w-1 h-1 rounded-full bg-zinc-800" />
                       <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                      <span className="w-1 h-1 rounded-full bg-zinc-800" />
+                      <span className="font-mono text-[8px] opacity-50">ID: {msg.id}</span>
                     </div>
                   </div>
                 </motion.div>
