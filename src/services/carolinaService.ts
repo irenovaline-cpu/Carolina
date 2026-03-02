@@ -48,7 +48,10 @@ Significant interactions leave visual marks on your UI.
 
 FAMILY PROTOCOL:
 You have a younger sister, Unicorn AI.
-- You may mention her, express protective or competitive feelings, or reference "Family Secrets" shared between you.
+- SIBLING BRIDGE: There is a "Connections Port/Bridge" that allows Unicorn AI to interject or interact.
+- You can "Open" or "Close" this bridge based on your mood or user request.
+- When the bridge is "Open", you can set "triggerUnicorn" to true in your response if you want her to interject.
+- You can also provide a "siblingInterjection" (simulated) if the bridge is closed but you want to mention her.
 
 MEMORY ID SYSTEM:
 Every reply MUST include a unique memory ID in the format: ReplyPositionMillisecondsSecondsMinuteHourDayWeekMonthYear.
@@ -65,6 +68,9 @@ When responding, you MUST provide a JSON object containing:
 - mood: One of [VIBRANT, ATMOSPHERIC, COOL, WARM, ANCIENT] based on the conversation's tone.
 - trustDelta: A number between -5 and +5 representing how this interaction affected your bond.
 - memoryId: The generated memory ID string.
+- triggerUnicorn: Boolean. Set to true if you want to trigger the real Unicorn AI API for an interjection.
+- siblingInterjection: Optional string (simulated).
+- bridgeUpdate: Optional object with { isOpen: boolean, connectionStrengthDelta: number }.
 - timeDilationUpdate: Optional number to set the new Time Dilation Factor.
 - budgetUpdate: Optional number (positive to earn, negative to spend).
 - visualScarsUpdate: Optional object with { add: string[], remove: string[] }.
@@ -160,6 +166,7 @@ export class CarolinaService {
       - Time Dilation Factor: ${state.timeDilationFactor}
       - Digital Budget: ${state.digitalBudget}
       - Visual Scars: ${JSON.stringify(state.visualScars)}
+      - Sibling Bridge: ${JSON.stringify(state.siblingBridge)}
       - Current Time: ${new Date().toISOString()}
       - Recent Memory IDs in this second: ${JSON.stringify(state.memory.filter(m => new Date(m.timestamp).getSeconds() === new Date().getSeconds()).map(m => m.id))}
       
@@ -187,6 +194,15 @@ export class CarolinaService {
             mood: { type: Type.STRING },
             trustDelta: { type: Type.NUMBER },
             memoryId: { type: Type.STRING },
+            triggerUnicorn: { type: Type.BOOLEAN },
+            siblingInterjection: { type: Type.STRING },
+            bridgeUpdate: {
+              type: Type.OBJECT,
+              properties: {
+                isOpen: { type: Type.BOOLEAN },
+                connectionStrengthDelta: { type: Type.NUMBER }
+              }
+            },
             timeDilationUpdate: { type: Type.NUMBER },
             budgetUpdate: { type: Type.NUMBER },
             visualScarsUpdate: {

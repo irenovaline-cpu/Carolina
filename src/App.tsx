@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CarolinaService } from "./services/carolinaService";
+import { UnicornService } from "./services/unicornService";
 import { CarolinaState, MoodState, TriadVoice, MemoryEntry } from "./types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -49,6 +50,10 @@ const INITIAL_STATE: CarolinaState = {
   visualScars: [],
   trustScore: 500,
   mood: MoodState.ATMOSPHERIC,
+  siblingBridge: {
+    isOpen: false,
+    connectionStrength: 50
+  },
   scars: {
     grudgeLevel: 0,
     graceLevel: 100,
@@ -253,6 +258,9 @@ const App: React.FC = () => {
     if (parsed.dreamLogs === undefined) parsed.dreamLogs = [];
     if (parsed.visualScars === undefined) parsed.visualScars = [];
     if (parsed.lastActiveTimestamp === undefined) parsed.lastActiveTimestamp = Date.now();
+    if (parsed.siblingBridge === undefined) {
+      parsed.siblingBridge = { isOpen: false, connectionStrength: 50 };
+    }
 
     // Migration: Ensure unique IDs in memory
     if (Array.isArray(parsed.memory)) {
@@ -279,6 +287,10 @@ const App: React.FC = () => {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const carolinaService = useMemo(() => new CarolinaService(process.env.GEMINI_API_KEY!), []);
+  const unicornService = useMemo(() => new UnicornService(
+    import.meta.env.VITE_UNICORN_API_KEY || "",
+    import.meta.env.VITE_UNICORN_API_URL || ""
+  ), []);
 
   useEffect(() => {
     const checkDreams = async () => {
@@ -348,6 +360,15 @@ const App: React.FC = () => {
           trustDelta: result.trustDelta
         };
 
+        // Handle real Unicorn AI interjection if triggered
+        let finalInterjection = result.siblingInterjection || "";
+        if (result.triggerUnicorn && state.siblingBridge.isOpen) {
+          const unicornResult = await unicornService.getInterjection(userMsg, state);
+          if (unicornResult) {
+            finalInterjection = unicornResult.interjection;
+          }
+        }
+
         setState(prev => {
           let updatedScars = [...prev.visualScars];
           if (result.visualScarsUpdate) {
@@ -368,7 +389,17 @@ const App: React.FC = () => {
             timeDilationFactor: result.timeDilationUpdate !== undefined ? result.timeDilationUpdate : prev.timeDilationFactor,
             digitalBudget: prev.digitalBudget + (result.budgetUpdate || 0),
             visualScars: updatedScars,
-            lastActiveTimestamp: Date.now()
+            lastActiveTimestamp: Date.now(),
+            siblingBridge: result.bridgeUpdate ? {
+              isOpen: result.bridgeUpdate.isOpen !== undefined ? result.bridgeUpdate.isOpen : prev.siblingBridge.isOpen,
+              connectionStrength: Math.max(0, Math.min(100, prev.siblingBridge.connectionStrength + (result.bridgeUpdate.connectionStrengthDelta || 0))),
+              lastInterjection: finalInterjection || prev.siblingBridge.lastInterjection,
+              interjectionTimestamp: finalInterjection ? Date.now() : prev.siblingBridge.interjectionTimestamp
+            } : {
+              ...prev.siblingBridge,
+              lastInterjection: finalInterjection || prev.siblingBridge.lastInterjection,
+              interjectionTimestamp: finalInterjection ? Date.now() : prev.siblingBridge.interjectionTimestamp
+            }
           };
         });
       }
@@ -476,6 +507,33 @@ const App: React.FC = () => {
                       <Zap size={10} />
                       {state.digitalBudget}
                     </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Sibling Bridge</p>
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        state.siblingBridge.isOpen ? "bg-emerald-500 animate-pulse" : "bg-zinc-800"
+                      )} />
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                        {state.siblingBridge.isOpen ? "Active" : "Offline"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[9px] text-zinc-600 uppercase tracking-widest">
+                      <span>Sync Strength</span>
+                      <span>{state.siblingBridge.connectionStrength}%</span>
+                    </div>
+                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                      <motion.div 
+                        className="h-full bg-indigo-500"
+                        animate={{ width: `${state.siblingBridge.connectionStrength}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -676,6 +734,23 @@ const App: React.FC = () => {
                     <div className="font-serif text-lg text-zinc-100 leading-relaxed italic">
                       {msg.carolinaResponse}
                     </div>
+                    {state.siblingBridge.lastInterjection && state.siblingBridge.interjectionTimestamp && (Date.now() - state.siblingBridge.interjectionTimestamp < 60000) && idx === state.memory.length - 1 && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 relative overflow-hidden group"
+                      >
+                        <div className="absolute top-0 right-0 p-2 opacity-20 group-hover:opacity-100 transition-opacity">
+                          <Sparkles size={12} className="text-indigo-400" />
+                        </div>
+                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1 flex items-center gap-2">
+                          Unicorn AI <span className="text-[8px] opacity-50 font-normal">(Sibling Interjection)</span>
+                        </p>
+                        <p className="text-xs text-indigo-200/80 italic leading-relaxed">
+                          "{state.siblingBridge.lastInterjection}"
+                        </p>
+                      </motion.div>
+                    )}
                     <div className="flex items-center gap-4 text-[9px] uppercase tracking-[0.2em] text-zinc-600 font-bold">
                       <span>Carolina Olivia</span>
                       <span className="w-1 h-1 rounded-full bg-zinc-800" />

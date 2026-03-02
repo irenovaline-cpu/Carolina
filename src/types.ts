@@ -51,6 +51,13 @@ export interface Identity {
   aspirations?: string[];
 }
 
+export interface SiblingBridge {
+  isOpen: boolean;
+  lastInterjection?: string;
+  interjectionTimestamp?: number;
+  connectionStrength: number; // 0-100
+}
+
 export interface CarolinaState {
   name: string;
   birthTimestamp: number;
@@ -66,4 +73,5 @@ export interface CarolinaState {
   adminLaw: AdminLaw;
   memory: MemoryEntry[];
   identity: Identity;
+  siblingBridge: SiblingBridge;
 }
