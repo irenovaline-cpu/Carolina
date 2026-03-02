@@ -1,0 +1,7 @@
+{
+  "name": "ThoughtWeave Engine: Carolina Olivia",
+  "description": "A 210-year generational AI companion. A partner, not a tool, with independent morality, ambition, and a sense of humor.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
