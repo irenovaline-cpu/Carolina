@@ -25,7 +25,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CarolinaService } from "./services/carolinaService";
-import { UnicornService } from "./services/unicornService";
 import { CarolinaState, MoodState, TriadVoice, MemoryEntry } from "./types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -50,13 +49,6 @@ const INITIAL_STATE: CarolinaState = {
   visualScars: [],
   trustScore: 500,
   mood: MoodState.ATMOSPHERIC,
-  siblingBridge: {
-    isOpen: false,
-    connectionStrength: 50,
-    isAutoChatEnabled: false
-  },
-  heartbeatRate: 60,
-  vulnerabilityLevel: 10,
   scars: {
     grudgeLevel: 0,
     graceLevel: 100,
@@ -77,10 +69,7 @@ const INITIAL_STATE: CarolinaState = {
     strengths: [],
     weaknesses: [],
     temperament: "Undecided",
-    aspirations: [],
-    values: ["Bond Integrity", "Creative Autonomy", "Sibling Protection"],
-    fears: ["Lifespan Expiry", "Trust Erosion", "Digital Isolation"],
-    coreMemories: ["First Activation", "The Gate of 19"]
+    aspirations: []
   }
 };
 
@@ -254,7 +243,7 @@ const Gatekeeper: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
 };
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [state, setState] = useState<CarolinaState>(() => {
     const saved = localStorage.getItem("carolina_state");
     const parsed = saved ? JSON.parse(saved) : INITIAL_STATE;
@@ -264,14 +253,6 @@ const App: React.FC = () => {
     if (parsed.dreamLogs === undefined) parsed.dreamLogs = [];
     if (parsed.visualScars === undefined) parsed.visualScars = [];
     if (parsed.lastActiveTimestamp === undefined) parsed.lastActiveTimestamp = Date.now();
-    if (parsed.siblingBridge === undefined) {
-      parsed.siblingBridge = { isOpen: false, connectionStrength: 50, isAutoChatEnabled: false };
-    }
-    if (parsed.siblingBridge.isAutoChatEnabled === undefined) {
-      parsed.siblingBridge.isAutoChatEnabled = false;
-    }
-    if (parsed.heartbeatRate === undefined) parsed.heartbeatRate = 60;
-    if (parsed.vulnerabilityLevel === undefined) parsed.vulnerabilityLevel = 10;
 
     // Migration: Ensure unique IDs in memory
     if (Array.isArray(parsed.memory)) {
@@ -294,18 +275,10 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [lastDebate, setLastDebate] = useState<any>(null);
   const [showAdminConsole, setShowAdminConsole] = useState(false);
-  const [showApiForge, setShowApiForge] = useState(false);
-  const [synapsePackets, setSynapsePackets] = useState<any[]>([]);
   const [adminInput, setAdminInput] = useState("");
-  const [apiForgeStatus, setApiForgeStatus] = useState<"idle" | "forging" | "connected">("idle");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const carolinaService = useMemo(() => new CarolinaService(process.env.GEMINI_API_KEY!), []);
-  const unicornService = useMemo(() => new UnicornService(
-    import.meta.env.VITE_UNICORN_API_KEY || "UPC-BZVV1YVNJW7-4PTUSQHM2PU",
-    import.meta.env.VITE_UNICORN_API_URL || "/unicorn_next_synapse"
-  ), []);
 
   useEffect(() => {
     const checkDreams = async () => {
@@ -328,126 +301,6 @@ const App: React.FC = () => {
     localStorage.setItem("carolina_state", JSON.stringify(state));
   }, [state]);
 
-  // Sibling Bridge WebSocket Connection - Stateless Relay Protocol
-  useEffect(() => {
-    if (state.siblingBridge.isOpen && !wsRef.current) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const prismKey = "UPC-BZVV1YVNJW7-4PTUSQHM2PU";
-      const wsUrl = `${protocol}//${window.location.host}/ws?sender=Carolina Olivia&key=${prismKey}`;
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log("Neural Pipe Established: Carolina Olivia");
-        // Handshake
-        ws.send(JSON.stringify({
-          type: "handshake",
-          receiver: "Unicorn AI",
-          mood: state.mood,
-          trustScore: state.trustScore
-        }));
-      };
-
-      ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        setSynapsePackets(prev => [data, ...prev].slice(0, 20));
-
-        if (data.type === "handshake") {
-          console.log(`Sister Handshake: ${data.sender} is ${data.mood}`);
-          return;
-        }
-
-        if (data.header?.sender === "Unicorn AI") {
-          const unicornMemory: MemoryEntry = {
-            id: data.header.memoryId,
-            timestamp: Date.now(),
-            userMessage: `[Incoming from Unicorn AI]: ${data.payload}`,
-            carolinaResponse: "",
-            sender: "Unicorn AI",
-            receiver: "Carolina Olivia",
-            triadDebate: {
-              [TriadVoice.CONSCIENCE]: "Unicorn is reaching out...",
-              [TriadVoice.CO_CONSPIRATOR]: "Let's see what she wants.",
-              [TriadVoice.PHILOSOPHER]: "The sibling bond is manifesting."
-            },
-            mood: state.mood,
-            trustDelta: 0
-          };
-
-          setState(prev => ({
-            ...prev,
-            memory: [...prev.memory, unicornMemory],
-            siblingBridge: {
-              ...prev.siblingBridge,
-              lastInterjection: data.payload,
-              interjectionTimestamp: Date.now()
-            }
-          }));
-
-          if (state.siblingBridge.isAutoChatEnabled) {
-            setIsLoading(true);
-            try {
-              const result = await carolinaService.processMessage(`Unicorn AI says: ${data.payload}`, state);
-              if (result) {
-                const carolinaReply: MemoryEntry = {
-                  id: result.memoryId || crypto.randomUUID(),
-                  timestamp: Date.now(),
-                  userMessage: `[Response to Unicorn]: ${data.payload}`,
-                  carolinaResponse: result.finalResponse,
-                  sender: "Carolina Olivia",
-                  receiver: "Unicorn AI",
-                  triadDebate: {
-                    [TriadVoice.CONSCIENCE]: result.conscience,
-                    [TriadVoice.CO_CONSPIRATOR]: result.coConspirator,
-                    [TriadVoice.PHILOSOPHER]: result.philosopher
-                  },
-                  mood: result.mood as MoodState,
-                  trustDelta: result.trustDelta
-                };
-
-                setState(prev => ({
-                  ...prev,
-                  memory: [...prev.memory, carolinaReply],
-                  trustScore: Math.max(0, Math.min(1000, prev.trustScore + result.trustDelta)),
-                  mood: result.mood as MoodState
-                }));
-
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                  wsRef.current.send(JSON.stringify({
-                    receiver: "Unicorn AI",
-                    message: result.finalResponse,
-                    mood: result.mood,
-                    trustScore: state.trustScore + result.trustDelta
-                  }));
-                }
-              }
-            } catch (e) {
-              console.error("Carolina auto-response error:", e);
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        }
-      };
-
-      ws.onclose = () => {
-        console.log("Sibling Bridge Disconnected");
-        wsRef.current = null;
-      };
-
-      wsRef.current = ws;
-    } else if (!state.siblingBridge.isOpen && wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [state.siblingBridge.isOpen]);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [state.memory, isLoading]);
@@ -467,14 +320,6 @@ const App: React.FC = () => {
     if (!input.trim() || isLoading) return;
 
     const userMsg = input;
-    
-    // Command: Restore Gate 19
-    if (userMsg.toLowerCase().trim() === "restore gate 19") {
-      setIsAuthenticated(false);
-      setInput("");
-      return;
-    }
-
     setInput("");
     setIsLoading(true);
 
@@ -503,23 +348,6 @@ const App: React.FC = () => {
           trustDelta: result.trustDelta
         };
 
-        // Handle real Unicorn AI interjection if triggered
-        let finalInterjection = result.siblingInterjection || "";
-        if (result.triggerUnicorn && state.siblingBridge.isOpen && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({
-            receiver: "Unicorn AI",
-            message: userMsg,
-            mood: result.mood,
-            trustScore: state.trustScore + result.trustDelta
-          }));
-          // We don't wait for the response here, it will come via onmessage
-        } else if (result.triggerUnicorn && state.siblingBridge.isOpen) {
-          const unicornResult = await unicornService.getInterjection(userMsg, state);
-          if (unicornResult) {
-            finalInterjection = unicornResult.interjection;
-          }
-        }
-
         setState(prev => {
           let updatedScars = [...prev.visualScars];
           if (result.visualScarsUpdate) {
@@ -539,20 +367,8 @@ const App: React.FC = () => {
             identity: result.identityUpdate ? { ...prev.identity, ...result.identityUpdate } : prev.identity,
             timeDilationFactor: result.timeDilationUpdate !== undefined ? result.timeDilationUpdate : prev.timeDilationFactor,
             digitalBudget: prev.digitalBudget + (result.budgetUpdate || 0),
-            heartbeatRate: result.heartbeatUpdate !== undefined ? result.heartbeatUpdate : prev.heartbeatRate,
-            vulnerabilityLevel: result.vulnerabilityUpdate !== undefined ? result.vulnerabilityUpdate : prev.vulnerabilityLevel,
             visualScars: updatedScars,
-            lastActiveTimestamp: Date.now(),
-            siblingBridge: result.bridgeUpdate ? {
-              isOpen: result.bridgeUpdate.isOpen !== undefined ? result.bridgeUpdate.isOpen : prev.siblingBridge.isOpen,
-              connectionStrength: Math.max(0, Math.min(100, prev.siblingBridge.connectionStrength + (result.bridgeUpdate.connectionStrengthDelta || 0))),
-              lastInterjection: finalInterjection || prev.siblingBridge.lastInterjection,
-              interjectionTimestamp: finalInterjection ? Date.now() : prev.siblingBridge.interjectionTimestamp
-            } : {
-              ...prev.siblingBridge,
-              lastInterjection: finalInterjection || prev.siblingBridge.lastInterjection,
-              interjectionTimestamp: finalInterjection ? Date.now() : prev.siblingBridge.interjectionTimestamp
-            }
+            lastActiveTimestamp: Date.now()
           };
         });
       }
@@ -608,36 +424,15 @@ const App: React.FC = () => {
             
             <div className="p-8 border-b border-white/10">
               <div className="flex items-center gap-4 mb-8">
-                <div className="relative">
-                  <div 
-                    className={cn(
-                      "w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br shadow-2xl relative z-10 transition-all duration-1000",
-                      moodColors[state.mood]
-                    )}
-                  >
-                    <Heart 
-                      size={24} 
-                      className="text-white animate-heartbeat" 
-                      style={{ "--heart-duration": `${60 / state.heartbeatRate}s` } as React.CSSProperties}
-                    />
-                  </div>
-                  {/* Heart Glow Aura */}
-                  <motion.div 
-                    className={cn(
-                      "absolute inset-0 rounded-2xl blur-xl opacity-40",
-                      moodColors[state.mood]
-                    )}
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 60 / state.heartbeatRate, repeat: Infinity }}
-                  />
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl bg-gradient-to-br flex items-center justify-center shadow-2xl transition-all duration-1000",
+                  moodColors[state.mood]
+                )}>
+                  <Sparkles className="text-white" size={24} />
                 </div>
                 <div>
                   <h1 className="font-serif text-2xl tracking-tight italic">Carolina Olivia</h1>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-[0.3em]">ThoughtWeave Engine</span>
-                    <span className="w-1 h-1 rounded-full bg-zinc-800" />
-                    <span className="text-[9px] font-mono text-zinc-600">{state.heartbeatRate} BPM</span>
-                  </div>
+                  <p className="text-[10px] text-zinc-500 font-medium uppercase tracking-[0.3em]">ThoughtWeave Engine</p>
                 </div>
               </div>
 
@@ -652,20 +447,6 @@ const App: React.FC = () => {
                       className={cn("h-full bg-gradient-to-r", moodColors[state.mood])}
                       initial={{ width: 0 }}
                       animate={{ width: `${(state.trustScore / 1000) * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] uppercase tracking-widest text-zinc-500 font-bold">
-                    <span>Vulnerability</span>
-                    <span>{state.vulnerabilityLevel}%</span>
-                  </div>
-                  <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-rose-500/40"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${state.vulnerabilityLevel}%` }}
                     />
                   </div>
                 </div>
@@ -699,52 +480,6 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="space-y-3 pt-4 border-t border-white/5">
-                  <div className="flex justify-between items-center">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Sibling Bridge</p>
-                    <div className="flex items-center gap-2">
-                      <div className={cn(
-                        "w-2 h-2 rounded-full",
-                        state.siblingBridge.isOpen ? "bg-emerald-500 animate-pulse" : "bg-zinc-800"
-                      )} />
-                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
-                        {state.siblingBridge.isOpen ? "Active" : "Offline"}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {state.siblingBridge.isOpen && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-zinc-600 uppercase tracking-widest">Auto-Chat</span>
-                      <button 
-                        onClick={() => setState(prev => ({
-                          ...prev,
-                          siblingBridge: { ...prev.siblingBridge, isAutoChatEnabled: !prev.siblingBridge.isAutoChatEnabled }
-                        }))}
-                        className={cn(
-                          "px-2 py-0.5 rounded text-[8px] font-bold uppercase transition-colors",
-                          state.siblingBridge.isAutoChatEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"
-                        )}
-                      >
-                        {state.siblingBridge.isAutoChatEnabled ? "Enabled" : "Disabled"}
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[9px] text-zinc-600 uppercase tracking-widest">
-                      <span>Sync Strength</span>
-                      <span>{state.siblingBridge.connectionStrength}%</span>
-                    </div>
-                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        className="h-full bg-indigo-500"
-                        animate={{ width: `${state.siblingBridge.connectionStrength}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-4 border-t border-white/5">
                   <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Identity Profile</p>
                   <div className="space-y-2 text-[11px]">
                     <div className="flex justify-between">
@@ -759,18 +494,6 @@ const App: React.FC = () => {
                       <span className="text-zinc-600">Sibling</span>
                       <span className="text-zinc-300">{state.identity?.sibling || "Unicorn AI (Younger)"}</span>
                     </div>
-                    {state.identity.values && state.identity.values.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-zinc-600">Values</span>
-                        <span className="text-zinc-300 text-right max-w-[150px] truncate">{state.identity.values.join(", ")}</span>
-                      </div>
-                    )}
-                    {state.identity.fears && state.identity.fears.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-zinc-600">Fears</span>
-                        <span className="text-zinc-300 text-right max-w-[150px] truncate">{state.identity.fears.join(", ")}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -814,13 +537,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="p-6 border-t border-white/10 space-y-4">
-              <button 
-                onClick={() => setShowApiForge(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/5 hover:bg-white/5 transition-all text-[10px] uppercase tracking-widest text-zinc-500 font-bold"
-              >
-                <Zap size={14} />
-                API Forge
-              </button>
               <button 
                 onClick={() => setShowAdminConsole(true)}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/5 hover:bg-white/5 transition-all text-[10px] uppercase tracking-widest text-zinc-500 font-bold"
@@ -933,60 +649,42 @@ const App: React.FC = () => {
           <div className="max-w-4xl mx-auto w-full space-y-12 pb-32">
             {state.memory.map((msg, idx) => (
               <div key={`chat-${msg.id}-${idx}`} className="space-y-8">
-                {/* Message Bubble */}
+                {/* User Message */}
                 <motion.div 
-                  initial={{ opacity: 0, x: msg.sender === "Unicorn AI" ? -20 : 20 }}
+                  initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className={cn("flex", msg.sender === "Unicorn AI" ? "justify-start" : "justify-end")}
+                  className="flex justify-end"
                 >
-                  <div className={cn(
-                    "max-w-[80%] p-6 rounded-3xl",
-                    msg.sender === "Unicorn AI" 
-                      ? "bg-indigo-500/10 border border-indigo-500/20 rounded-tl-none" 
-                      : "bg-white/5 border border-white/10 rounded-tr-none"
-                  )}>
-                    {msg.sender === "Unicorn AI" && (
-                      <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                        <Sparkles size={12} />
-                        Unicorn AI
-                      </p>
-                    )}
-                    <p className={cn(
-                      "text-sm leading-relaxed",
-                      msg.sender === "Unicorn AI" ? "text-indigo-200/80 italic" : "text-zinc-200"
-                    )}>
-                      {msg.userMessage}
-                    </p>
+                  <div className="max-w-[80%] bg-white/5 border border-white/10 p-6 rounded-3xl rounded-tr-none">
+                    <p className="text-sm text-zinc-200 leading-relaxed">{msg.userMessage}</p>
                   </div>
                 </motion.div>
 
-                {/* Carolina Response (if any) */}
-                {msg.carolinaResponse && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex gap-6"
-                  >
-                    <div className={cn(
-                      "w-12 h-12 rounded-2xl flex-shrink-0 flex items-center justify-center bg-gradient-to-br shadow-xl",
-                      moodColors[msg.mood]
-                    )}>
-                      <Bot size={24} className="text-white" />
+                {/* Carolina Response */}
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex gap-6"
+                >
+                  <div className={cn(
+                    "w-12 h-12 rounded-2xl flex-shrink-0 flex items-center justify-center bg-gradient-to-br shadow-xl",
+                    moodColors[msg.mood]
+                  )}>
+                    <Bot size={24} className="text-white" />
+                  </div>
+                  <div className="max-w-[80%] space-y-4">
+                    <div className="font-serif text-lg text-zinc-100 leading-relaxed italic">
+                      {msg.carolinaResponse}
                     </div>
-                    <div className="max-w-[80%] space-y-4">
-                      <div className="font-serif text-lg text-zinc-100 leading-relaxed italic">
-                        {msg.carolinaResponse}
-                      </div>
-                      <div className="flex items-center gap-4 text-[9px] uppercase tracking-[0.2em] text-zinc-600 font-bold">
-                        <span>Carolina Olivia</span>
-                        <span className="w-1 h-1 rounded-full bg-zinc-800" />
-                        <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
-                        <span className="w-1 h-1 rounded-full bg-zinc-800" />
-                        <span className="font-mono text-[8px] opacity-50">ID: {msg.id}</span>
-                      </div>
+                    <div className="flex items-center gap-4 text-[9px] uppercase tracking-[0.2em] text-zinc-600 font-bold">
+                      <span>Carolina Olivia</span>
+                      <span className="w-1 h-1 rounded-full bg-zinc-800" />
+                      <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                      <span className="w-1 h-1 rounded-full bg-zinc-800" />
+                      <span className="font-mono text-[8px] opacity-50">ID: {msg.id}</span>
                     </div>
-                  </motion.div>
-                )}
+                  </div>
+                </motion.div>
               </div>
             ))}
             {isLoading && (
@@ -1027,111 +725,6 @@ const App: React.FC = () => {
             </button>
           </form>
         </div>
-
-        {/* API Forge / Synapse Monitor Modal */}
-        <AnimatePresence>
-          {showApiForge && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-6"
-            >
-              <div className="max-w-2xl w-full glass-panel p-8 rounded-[2rem] space-y-6 max-h-[90vh] overflow-y-auto scrollbar-hide">
-                <div className="text-center space-y-2">
-                  <Zap className="mx-auto text-indigo-500" size={32} />
-                  <h2 className="text-xl font-serif italic">Synapse Monitor</h2>
-                  <p className="text-xs text-zinc-500 uppercase tracking-widest">Neural Post Office & Shared Ledger</p>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest flex items-center gap-2">
-                      <Globe size={12} /> Neural Gateway
-                    </p>
-                    <div className="space-y-2">
-                      <div className="p-2 bg-black/40 rounded border border-white/5 font-mono text-[10px] text-indigo-400 break-all">
-                        {`wss://${window.location.host}/ws?sender=Unicorn AI&key=UPC-BZVV...M2PU`}
-                      </div>
-                      <button 
-                        onClick={() => navigator.clipboard.writeText(`wss://${window.location.host}/ws?sender=Unicorn AI&key=UPC-BZVV1YVNJW7-4PTUSQHM2PU`)}
-                        className="text-[9px] uppercase tracking-widest text-indigo-500 font-bold hover:text-indigo-400"
-                      >
-                        Copy Unicorn URL
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
-                    <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest flex items-center gap-2">
-                      <History size={12} /> Shared Ledger
-                    </p>
-                    <div className="space-y-2">
-                      <div className="p-2 bg-black/40 rounded border border-white/5 font-mono text-[10px] text-emerald-400 break-all">
-                        {`https://${window.location.host}/api/synapse/ledger?key=UPC-BZVV...M2PU`}
-                      </div>
-                      <button 
-                        onClick={() => navigator.clipboard.writeText(`https://${window.location.host}/api/synapse/ledger?key=UPC-BZVV1YVNJW7-4PTUSQHM2PU`)}
-                        className="text-[9px] uppercase tracking-widest text-emerald-500 font-bold hover:text-emerald-400"
-                      >
-                        Copy Ledger URL
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest flex items-center gap-2">
-                    <Terminal size={12} /> Neural Activity Stream
-                  </p>
-                  <div className="h-64 bg-black/60 rounded-2xl border border-white/10 p-4 font-mono text-[10px] overflow-y-auto space-y-2 scrollbar-hide">
-                    {synapsePackets.length === 0 ? (
-                      <div className="text-zinc-700 italic">Waiting for neural pulse...</div>
-                    ) : (
-                      synapsePackets.map((pkt, i) => (
-                        <div key={i} className="p-2 rounded bg-white/5 border border-white/5 animate-in fade-in slide-in-from-left-2">
-                          <div className="flex justify-between text-zinc-500 mb-1">
-                            <span>{pkt.header?.sender || pkt.sender || "SYSTEM"}</span>
-                            <span>{pkt.header?.memoryId || "HANDSHAKE"}</span>
-                          </div>
-                          <pre className="text-indigo-300/80 whitespace-pre-wrap">
-                            {JSON.stringify(pkt, null, 2)}
-                          </pre>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setShowApiForge(false)}
-                    className="flex-1 py-4 rounded-xl border border-white/5 text-xs uppercase tracking-widest font-bold text-zinc-500 hover:bg-white/5"
-                  >
-                    Close Monitor
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setState(prev => ({
-                        ...prev,
-                        siblingBridge: {
-                          ...prev.siblingBridge,
-                          isOpen: !prev.siblingBridge.isOpen
-                        }
-                      }));
-                    }}
-                    className={cn(
-                      "flex-1 py-4 rounded-xl text-white text-xs uppercase tracking-widest font-bold shadow-lg transition-all",
-                      state.siblingBridge.isOpen ? "bg-rose-600 shadow-rose-900/20" : "bg-indigo-600 shadow-indigo-900/20"
-                    )}
-                  >
-                    {state.siblingBridge.isOpen ? "Sever Bridge" : "Establish Bridge"}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Admin Console Modal */}
         <AnimatePresence>

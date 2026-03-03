@@ -19,8 +19,6 @@ export interface MemoryEntry {
   timestamp: number;
   userMessage: string;
   carolinaResponse: string;
-  sender?: string; // "User", "Unicorn AI", "Carolina Olivia"
-  receiver?: string;
   triadDebate: {
     [key in TriadVoice]: string;
   };
@@ -51,17 +49,6 @@ export interface Identity {
   weaknesses?: string[];
   temperament?: string;
   aspirations?: string[];
-  values?: string[];
-  fears?: string[];
-  coreMemories?: string[];
-}
-
-export interface SiblingBridge {
-  isOpen: boolean;
-  lastInterjection?: string;
-  interjectionTimestamp?: number;
-  connectionStrength: number; // 0-100
-  isAutoChatEnabled: boolean; // If true, Carolina and Unicorn will chat automatically
 }
 
 export interface CarolinaState {
@@ -79,7 +66,4 @@ export interface CarolinaState {
   adminLaw: AdminLaw;
   memory: MemoryEntry[];
   identity: Identity;
-  siblingBridge: SiblingBridge;
-  heartbeatRate: number; // BPM
-  vulnerabilityLevel: number; // 0-100
 }

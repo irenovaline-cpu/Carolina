@@ -40,19 +40,6 @@
   100% { opacity: 0.3; }
 }
 
-@keyframes heartbeat {
-  0% { transform: scale(1); }
-  15% { transform: scale(1.15); }
-  30% { transform: scale(1); }
-  45% { transform: scale(1.25); }
-  70% { transform: scale(1); }
-  100% { transform: scale(1); }
-}
-
-.animate-heartbeat {
-  animation: heartbeat var(--heart-duration, 1s) ease-in-out infinite;
-}
-
 .scar-crack {
   background: linear-gradient(45deg, transparent 45%, rgba(255,255,255,0.1) 48%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.1) 52%, transparent 55%);
   background-size: 200% 200%;
